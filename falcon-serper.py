@@ -9,7 +9,7 @@ from queue import Queue
 from ratelimit import limits, sleep_and_retry
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Falcon-Serper Multi-threaded search query script.")
+    parser = argparse.ArgumentParser(description="Multi-threaded search query script.")
     parser.add_argument("-i", "--input", type=str, required=True, help="Path to the input file containing search queries.")
     parser.add_argument("-o", "--output", type=str, required=True, help="Path to the output file to save search results.")
     parser.add_argument("-t", "--threads", type=int, default=5, help="Number of worker threads to use.")
@@ -30,6 +30,7 @@ NUM_RESULTS = args.num
 RATE_LIMIT_CALLS = 60
 RATE_LIMIT_PERIOD = 60
 total_links = [0]
+query_links = {}
 
 @sleep_and_retry
 @limits(calls=RATE_LIMIT_CALLS, period=RATE_LIMIT_PERIOD)
@@ -90,6 +91,9 @@ def worker(output_file, num, pages, completed, failed, lock, failed_file):
                         file.write(f"{link}\n")
                 with lock:
                     total_links[0] += len(links)
+                    query_links[query] = len(links)
+                    completed[0] += 1  # Move the completed increment here
+                print(f"Links for query '{query}' saved to file.")
         except Exception as e:
             print(f"Error processing query '{query}': {e}")
             with lock:
@@ -103,6 +107,19 @@ def load_queries_from_file(file_path):
     with open(file_path, "r") as file:
         queries = [line.strip() for line in file.readlines()]
     return queries
+
+def save_top_queries(query_links, output_file):
+    sorted_queries = sorted(query_links.items(), key=lambda x: x[1], reverse=True)
+    with open(output_file, "w", encoding="utf-8") as file:
+        for query, link_count in sorted_queries:
+            file.write(f"{query}: {link_count} links\n")
+
+def display_summary(done_queries, failed_queries, unique_queries, total_links):
+    print("\nSummary:")
+    print(f"Done Queries: {done_queries}")
+    print(f"Failed Queries: {failed_queries}")
+    print(f"Unique Queries: {unique_queries}")
+    print(f"Total Links: {total_links}\n")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -141,4 +158,7 @@ for thread in threads:
 all_threads_completed.set()
 banner_thread.join()
 
+save_top_queries(query_links, "unique.txt")
+display_summary(completed[0], failed[0], len(query_links), total_links[0])
 logging.info("All search queries completed.")
+
