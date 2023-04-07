@@ -108,7 +108,7 @@ def extract_links(response_text):
     data = json.loads(response_text)
     links = []
     if "organic" in data:
-        links = [item["link"] for item in data["organic"]]
+        links = [item["link"] for item in data["organic"] if "?" in item["link"] or "=" in item["link"]]
     else:
         print(f"No organic results in API response:\n{response_text}")
     return links
